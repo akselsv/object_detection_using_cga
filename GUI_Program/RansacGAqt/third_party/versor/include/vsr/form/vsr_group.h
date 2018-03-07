@@ -1,11 +1,40 @@
 /*
+ * =====================================================================================
+ *
+ *       Filename: vsr_group.h
+ *
+ *        Version:  1.0
+ *        Created:  04/30/2015 15:30:13
+ *       Revision:  none
+ *
+ *         Author:  Pablo Colapinto (), gmail->wolftype
+ *   Organization:  wolftype
+ *
+ * =====================================================================================
+ */
 
-Generic Group 
+/*!
+
+@file
+
+Point and Space Groups in 2D and 3D
+
+Groups are defined generically on reflection pin type T, so
+the techniques could theoretically be extended to build hyperbolic groups 
+that reflect over circles and spheres.
+
+Examples that use this:
+
+scratch/projects/groups/xSpaceGroup2D.cpp
+scratch/projects/groups/xSpaceGroup3D.cpp
             
-see also vsr_root.h for generating reflection groups
+@sa vsr_root.h for generating reflection groups
 
-replaces vsr_pointGroup.h 
-
+@todo deprecate overloaded () operator (in favor of `apply`)
+@todo fix up SpaceGroup2D so that it is as complete as SpaceGroup3D 
+@todo revisit application algorithm (e.g. reserve space ahead of time)
+@todo only supports primitive lattice (not body centered, etc) right now
+@todo bravais system type should be determinable to avoid crashing
 */
   
 #ifndef  vsr_group_INC
@@ -21,16 +50,18 @@ using std::vector;
 
 namespace vsr{ 
 
-/// Simple Reflection Group (no translating or gliding spinors)
+/// Simple Reflection group templated on Pin Type (no translating or gliding spinors)
+/// @todo make class with private member mOps
 template<class V>
 struct SimpleGroup{
    vector<V> ops;                       ///< Pin Operators (Vec, etc)
 
    SimpleGroup() {}
-   SimpleGroup( vector<V> v ) : ops(v) {} ///< Instantiate with unit length pin group
+   SimpleGroup( vector<V> v ) : ops(v) {} ///< Instantiate with pin group
  
-    /// Applies all operators on p motif and returns results
-	  template<class T>
+    /// Applies all std::vector<V> operators onto p motif and returns results
+    /// as std::vector<T>
+  template<class T>
     vector<T> operator()(const T& p){
         vector<T> res;
         for (auto& i : ops ){
@@ -44,97 +75,103 @@ struct SimpleGroup{
 };
 
 
-///// Abstract Odd Operator
-//struct OddSymmetryOperator{
-//  
-//   template<class T>
-//   T apply(const T& t);
-//};
-
 /// A Group of Operations called with group( sometype t ) or group( vector<sometype> t)
 /// V are  versors any dimension, etc DualLines in cga2D or DualPlanes in cga3D or Circles . . .
-/// NOTE this is overshadowed by the pointgroup3d, which handles its own operator ()
+/// NOTE this is overloaded by the PointGroup3D, which handles its own operator ()
+/// @todo 
 template< class V >
 struct Group {
 
-  int numSimple; ///< number of simple roots used to generate group
+  /// OpInst specifies type of operator, index into operation list, and index of input
+//  struct OpInst{
+//    int type, opIdx, resIdx;
+//  };
+
+//  vector<OpInst> opInst;    ///< store all transformation instructions here.
+//  int mNumGen;            ///< the number of generators
+
+  int numSimple;          ///< The number of simple roots used to generate group
 
   /// Trs is the translator type of whatever conformal metric we are in
-  //typedef typename V::template BType< typename V::Mode::Trs > Trs; 
   using Trs = typename V::space::translator;
   using GlideType = decltype(V()*Trs());
   using ScrewType = decltype(V()*V()*Trs());
 
-   vector<V> ops;                              ///< Pin Operators (Vec, etc)
-   vector<decltype(V()*V())> sops;             ///< Spin Operators (Rot, etc)
-   vector<decltype(V()*V()*V())> tops;         ///< Triple Reflection (abbar 3d group)
-   vector<decltype(V()*Trs())> gops;           ///< Glide Operators 
-   vector<decltype(V()*V()*Trs())> scrops;     ///< Screw Operators (Motor)
+  vector<V> ops;                              ///< Pin Operators (Vec, etc)
 
-   Group() {}
-   Group( vector<V> v ) : ops(v) {}
+
+  vector<decltype(V()*V())> sops;             ///< Spin Operators (Rot, etc)
+  vector<decltype(V()*V()*V())> tops;         ///< Triple Reflection (abbar 3d group)
+  vector<decltype(V()*Trs())> gops;           ///< Glide Operators 
+  vector<decltype(V()*V()*Trs())> scrops;     ///< Screw Operators (Motor)
+
+  Group() {}
+  Group( vector<V> v ) : ops(v) {}
+
+  /// Generate basic set of versors (we will replace with glides and screws later)
+//  virtual void seed(const V& vec =Vec(.213,.659,1.6967).unit() ) = 0;
+
+
 
     /// Applies all operators on p motif and returns results
-    // Note this is overloaded in PointGroups, which use a "seed-based recording" approach
-	  template<class T>
-    vector<T> operator()(const T& p){
-          vector<T> res;
-
-          for (auto& i : ops ){
-              T tp = p.reflect( i.unit() ); 
-              res.push_back( tp );
-              //reflect EACH back over first mirror plane to get original ...
-              res.push_back( tp.reflect( ops[0].unit() ) );
-          }
-
-          for (auto& i : sops){
-            T tp = p.spin(i);
-            res.push_back(tp);
-          }
-
-          //unsure about this (abc)..
-          for (auto& i : tops){
-            T tp = p.reflect(i);
-            res.push_back(tp);
-          }
-
-
-           //apply glides and reapply pins
-           for (auto& i : gops){
-              T tg = p.reflect(i);
-              if (ops.empty()) {
-                res.push_back(tg);
-                res.push_back( tg.reflect( gops[0] ) );
-              }              
-              for (auto& j : ops){
-                T tp = tg.reflect( j.unit() );
-                res.push_back(tp);
-                res.push_back( tp.reflect( ops[0].unit() ) );
-              }
-           }
-          
-          return res;
-    }
-
-    /// Applies all operations on a vector of type T
-    template<class T>
-    vector<T> operator()(const vector<T>& p){
-      vector<T> res;
-      for (auto& i : p) {
-        auto tRes = (*this)(i);
-        for (auto& j : tRes){
-          res.push_back(j);
-        }
-      }    
-      return res;
-    }
-
-
+    /// Note this is overloaded in PointGroups, which use a "seed-based recording" approach
+//  template<class T>
+//    vector<T> operator()(const T& p){
+//          vector<T> res;
+//
+//          for (auto& i : ops ){
+//              T tp = p.reflect( i.unit() ); 
+//              res.push_back( tp );
+//              //reflect EACH back over first mirror plane to get original ...
+//              res.push_back( tp.reflect( ops[0].unit() ) );
+//          }
+//
+//          for (auto& i : sops){
+//            T tp = p.spin(i);
+//            res.push_back(tp);
+//          }
+//
+//          //unsure about this (abc)..
+//          for (auto& i : tops){
+//            T tp = p.reflect(i);
+//            res.push_back(tp);
+//          }
+//
+//
+//           //apply glides and reapply pins
+//           for (auto& i : gops){
+//              T tg = p.reflect(i);
+//              if (ops.empty()) {
+//                res.push_back(tg);
+//                res.push_back( tg.reflect( gops[0] ) );
+//              }              
+//              for (auto& j : ops){
+//                T tp = tg.reflect( j.unit() );
+//                res.push_back(tp);
+//                res.push_back( tp.reflect( ops[0].unit() ) );
+//              }
+//           }
+//          
+//          return res;
+//    }
+//
+//    /// Applies all operations on a vector of type T
+//    template<class T>
+//    vector<T> operator()(const vector<T>& p){
+//      vector<T> res;
+//      for (auto& i : p) {
+//        auto tRes = (*this)(i);
+//        for (auto& j : tRes){
+//          res.push_back(j);
+//        }
+//      }    
+//      return res;
+//    }
 
 }; 
 
-//A 2d point group at the origin . . . 
-//////V is the reflection type of the point group (e.g. Vec)
+/// A 2D Point Group at the origin
+/// Templated on V, the reflection type of the point group (e.g. Vec or DualPlane)
 template< class V > 
 struct PointGroup2D : Group<V> {
   
@@ -147,15 +184,24 @@ struct PointGroup2D : Group<V> {
 
     PointGroup2D(int p, bool pin = true) : mP(p), bPin(pin) {
        a = V::x;
-       b = V::x.rot( Biv::xy * PIOVERTWO/p );
+       b = V::x.rot( Biv::xy * -PIOVERTWO/p );
        calcOps(a.unit(), b.unit());
+       
+       //setOps ();        
+       //seed ();
    }
 
+   /// For pin groups, generate a reflection root system of ops
+   /// Otherwise, generate mP rotors
+   /// @sa vsr_root.h
    void calcOps(const V& ta, const V& tb){
+       
        this->ops.clear();
        this->sops.clear();
        this->gops.clear();
-       if (bPin) this->ops = Root::System(ta,tb);
+
+       if (bPin)
+          this->ops = Root::System(ta,tb);
        else {
         auto rot = a*b;
         auto trot = rot;
@@ -163,15 +209,196 @@ struct PointGroup2D : Group<V> {
           this->sops.push_back(trot);
           trot = trot * rot;
         }
-      }    
+      }  
+      
+      
     }
+
+  void setOps (){
+     this->ops = {a,b};
+     this->sops = {a*b};
+    // this->gops = vector<GlideType>(2);  
+  }
+
+// 2D seed
+//  virtual void seed(const V& vec =V(.213,.659,0.0).unit()){
+//
+//    if (!bPin) {
+//      for (int i = 0; i < mP; ++i) {
+//        opInst . push_back ( {1,0,0} );
+//      }
+//      return;
+//    }
+//
+//    opInst = { {0,0,0}, {0,1,0} };
+//
+//    
+//    vector<Vec> tv;
+//    tv.push_back(vec);
+//
+//    for (auto& i: opInst){
+//      tv.push_back( vec.reflect( this->ops[i.opIdx]) );
+//    }
+//
+//    int numBasicOps = 2; //opInst.size();
+//
+//    //REFLECTIONS RECORD
+//    //Keep transforming basic seed until none are new, record results in reflectIdx
+//    bool keepgoing=true; int iter=0; int maxiter = 100;
+//    while(keepgoing && iter<maxiter){
+//      iter++;
+//      keepgoing=false;
+//      int tn = tv.size();
+//      
+//      //Any New Reflection Results
+//      for(int i =0; i<numBasicOps; ++i){
+//        for (int j=0;j<tn;++j){
+//          tmp =  tv[j].reflect( this->ops[ opInst[i].opIdx ] );
+//   
+//          bool exists = false;
+//          for (auto& k : tv){
+//            exists = Root::Compare(tmp,k);
+//            if (exists) {
+//              break;
+//            }
+//           }
+//  
+//          //if new, add result to tv and idx 
+//          if (!exists){
+//            tv.push_back(tmp);
+//            opInst.push_back( {0, opInst[i].opIdx, j} );
+//            keepgoing=true;
+//          }
+//        }
+//      }
+//    }
+// }
+ 
+//    // apply transformation group to a multivector T using seed method (in progress...)
+//    template<class T>
+//    vector<T> apply2(const T& p) const{
+//            
+//      vector<T> res;
+//      res.push_back(p);
+//
+//      for (auto& i : opInst){
+//        T tmp;
+//        T& input = res[i.resIdx];
+//        switch(i.type){
+//         case 0: //reflect
+//            tmp = input.reflect( this->ops[ i.opIdx] );
+//            break;
+//         case 1: //spin
+//            tmp = input.spin( this->sops[ i.opIdx] );
+//            break;
+//         case 3: //glide
+//            tmp = input.reflect( this->gops[ i.opIdx] );
+//            break;
+//        }
+//        res.push_back(tmp);
+//      }
+//
+//      return res;
+//    }
+
+    size_t numOps () const {
+      int o = this->ops . size ();
+      int s = this->sops . size ();
+      int g = this->gops . size ();
+
+      int gg = (o == 0) ? g * 2 : o * g * 2;
+      
+      return o*2 + s + gg; 
+    }
+
+    /*-----------------------------------------------------------------------------
+     *  Apply translations to a single element
+     *-----------------------------------------------------------------------------*/
+    template<class T>
+    vector<T> apply (const T& motif) const {
+      
+      vector<T> res;
+      res . reserve (numOps());
+      
+      for (auto& i : this->ops ){
+        //reflect motif over each generator
+        T tm = motif.reflect( i.unit() ); 
+        res.push_back( tm );
+        //reflect EACH back over first mirror plane to get original ...
+        res.push_back( tm.reflect( this->ops[0].unit() ) );
+      }
+
+      for (auto& i : this->sops ){
+        T tm = motif.spin(i.unit()); 
+        res.push_back( tm );
+      }
+      
+      for (auto& i : this->gops){
+        T tg = motif.reflect(i);
+        if (this->ops.empty()) {
+         res.push_back(tg);
+         res.push_back(tg.reflect( this->gops[0] ) );
+        }              
+        for (auto& j : this->ops){
+          T tp = tg.reflect( j.unit() );
+          res.push_back(tp);
+          res.push_back( tp.reflect( this->ops[0].unit() ) );
+        }
+      }
+  
+      return res;
+    }
+
+    /// Apply to a vector of elements and striate results
+    template<class T>
+    vector<T> apply(const vector<T>& motif){
+      vector<T> res (numOps() * motif.size ());
+      int ii=0;
+      for (auto& i : motif){
+        auto tmp = apply(i);
+        int jj=0;
+        for (auto& j : tmp){
+          int idx = jj*motif.size() + ii;
+          res[idx]=j;
+          jj++;
+        }
+        ii++;
+      }
+      return res;
+    }
+
+//      for (auto& i : motif){
+//        vector<T> tRes = apply(i);
+//        for (auto& j : tRes) res.push_back(j);
+//      }
+//      return res;
+//    }
+
+ //   template<class T>
+ //   vector<T> apply(const vector<T>& p) const{
+ //     vector<T> res( (opIdx.size()+1) * p.size() );
+ //     int ii=0;
+ //     for (auto& i : p){
+ //       auto tmp = apply(i);
+ //       int jj=0;
+ //       for (auto& j : tmp){
+ //         int idx = jj*p.size() + ii;
+ //         res[idx]=j;
+ //         jj++;
+ //       }
+ //       ii++;
+ //     }
+ //     return res;
+ //   }
+
 
 };
 
-//a pointgroup + a lattice formed by translating along the generators a and b
-//we generate the point group calcOps() and then replace by glide reflections if called for
-//To use Translators multiplicatively, here we assume the conformal model is in play (2D or above)
-template<class V > 
+///  A PointGroup2D along with a lattice formed by translating along the generators a and b
+///  we generate the point group calcOps() and then replace by glide reflections if called for
+///  To use Translators multiplicatively, here we assume the conformal model is in play (2D or above)
+///  typename V is a cga::Vec pin group 
+template<class V> 
 struct SpaceGroup2D : PointGroup2D<V> {
   
   using Trs = typename V::space::translator;
@@ -193,28 +420,27 @@ struct SpaceGroup2D : PointGroup2D<V> {
   SpaceGroup2D(int p, float ratio = 1.0, bool pin=true, int div = 1, bool ga=false, bool gb=false) 
   : PointGroup2D<V>(p,pin), mRatioY(ratio), mDiv(div)  {
   
-  
     if (p==1){
       //Glide Reflections
       if (ga) { //replace first mirror
         this->ops.clear();
-       // this->ops.push_back(this->b);
         this->gops.push_back( this->a * nga::Gen::trs( Vec::y * .5) ); 
       }        
     } else if (p<4){ 
       //Glide Reflections
       if (ga) { //replace first mirror
         this->ops.clear();
-        this->ops.push_back(this->b);
+        this->ops.push_back( this->b );
         this->gops.push_back( this->a * nga::Gen::trs(this->b * .5) ); 
       }    
       if (gb) { //replace second mirror
-        this->ops.pop_back();
+        if (!this->ops.empty())
+          this->ops.pop_back();
         this->gops.push_back( this->b * nga::Gen::trs(this->a * .5) ); 
       }
     } else {
       if (p==4){
-        this->b = this->a + (this->a).rot( Biv::xy * PIOVERTWO/2);
+        this->b = this->a + (this->a).rot( Biv::xy * -PIOVERTWO/2);
         if(ga){
           this->ops.clear();
           this->ops.push_back(this->b.unit());
@@ -223,13 +449,12 @@ struct SpaceGroup2D : PointGroup2D<V> {
         }
       }
       if (p==6){
-        this->b = this->a + this->a.rot( Biv::xy * PIOVERTWO/3);
+        this->b = this->a + this->a.rot( Biv::xy * -PIOVERTWO/3);
       }
     }
-  
   }
 
-
+    /// Get translation vector at x,y
     Vec vec(float x, float y){
       if (this->mP!=1) return this->a*x*mRatioX + this->b*y*mRatioY; 
       else return this->a*x + Vec::y*y;
@@ -239,125 +464,84 @@ struct SpaceGroup2D : PointGroup2D<V> {
     /*-----------------------------------------------------------------------------
      *  Apply translations to a single element
      *-----------------------------------------------------------------------------*/
-    template<class T>
-    vector<T> apply(const T& motif, int x, int y){
-      
-      auto tmp = (*this)(motif);  
-      vector<T> res;
-
-      for (auto& i : tmp ){
-        for (int j=-x/2.0;j<x/2.0;++j){
-          for (int k=-y/2.0;k<y/2.0;++k){
-            for (int m =0;m<mDiv;++m){
-              float t = (float)m/mDiv;
-              //Vec v = vec(j
-              res.push_back( i.trs( vec(j,k) + vec(t,t) ) );
-            }
-          }
-        }
-      }
-      return res;
-    }
-
-    /// Apply to a vector of elements
-    template<class T>
-    vector<T> apply(const vector<T>& motif, int x, int y){
-      vector<T> res;
-      for (auto& i : motif){
-        vector<T> tRes = apply(i,x,y);
-        for (auto& j : tRes) res.push_back(j);
-      }
-      return res;
-    }
-
-    /// Don't apply operations, just hang on lattice points
+    /// Hang motif on lattice points
     template<class T>
     vector<T> hang(const T& motif, int x, int y){      
       vector<T> res;
-        for (int j=-x/2.0;j<x/2.0;++j){
-          for (int k=-y/2.0;k<y/2.0;++k){
+      Vec bottom_left = vec(-(x-1)/2.0, -(y-1)/2.0);
+
+        for (int j=0; j<x; ++j){
+          for (int k=0; k<y; ++k){
             for (int m =0;m<mDiv;++m){
               float t = (float)m/mDiv;
-              res.push_back( motif.trs( vec(j,k) + vec(t,t) ) );
+              res.push_back( motif.trs(bottom_left + vec(j,k) + vec(t,t) ) );
             }
           }
         }
       return res;
     }    
-    /// Don't apply operations, just hang on lattice points
+    
+    /// Hang std::vector on lattice points and striate
     template<class T>
     vector<T> hang(const vector<T>& motif, int x, int y){      
       vector<T> res;
+      Vec bottom_left = vec(-(x-1)/2.0, -(y-1)/2.0);
       for (auto& i : motif){
-        for (int j=-x/2.0;j<x/2.0;++j){
-          for (int k=-y/2.0;k<y/2.0;++k){
+        auto tres = hang(i,x,y);
+        res . insert (res.end (), tres.begin (), tres.end());
+      }
+      return res;
+    } 
+
+    /// Don't apply operations, just hang on lattice points before/after possibly applying bilinear function F
+    template<class T, class F>
+    vector<T> hang(const T& motif, int x, int y, int bPre, const F& bifunc){      
+      vector<T> res;
+      Vec bottom_left = vec(-(x-1)/2.0, -(y-1)/2.0);
+
+        for (int j=0; j<x; ++j){
+          for (int k=0; k<y; ++k){
             for (int m =0;m<mDiv;++m){
               float t = (float)m/mDiv;
-              res.push_back( i.trs( vec(j,k) + vec(t,t) ) );
+              if (bPre ==0){        //don't apply biFunc
+                res.push_back(motif.trs(bottom_left + vec(j,k) + vec(t,t)));
+              } else if (bPre==1) { //apply biFunc before translating
+                T tres = bifunc((float)j/x, (float)k/y, motif);
+                res.push_back( tres.trs(bottom_left + vec(j,k) + vec(t,t)));
+              } else if (bPre==2) { //apply biFunc after translating
+                T tres = motif.trs(bottom_left + vec(j,k) + vec(t,t));
+                res.push_back(bifunc ((float)j/x, (float)k/y, tres));
+              }
             }
           }
         }
+      return res;
+    }
+
+    /// Don't apply operations, just hang on lattice points and apply bilinear function F
+    template<class T, class F>
+    vector<T> hang(const vector<T>& motif, int x, int y, int bPre, const F& bifunc){      
+      vector<T> res;
+      Vec bottom_left = vec(-(x-1)/2.0, -(y-1)/2.0);
+      for (auto& i : motif){
+        auto tres = hang(i,x,y,bPre,bifunc);
+        res . insert (res.end (), tres.begin (), tres.end());
       }
       return res;
-    }    
-};
-
-
-/// ND lattice, on a metric specified by V's type.  Not a group, but a group can be made from it
-template< int DIM, class V >
-struct Lattice {
-
-    static const int Dim = DIM;
-
-    //GET VEC "B" TYPE OF TYPE V's AMBIENT METRIC ("MODE")
-    typedef typename V::template BType< typename V::Mode::Vec > Vec;
-    typedef typename V::template BType< typename V::Mode::Biv > Biv;
-
-    Vec vec[ DIM ];
-
-    Vec& operator[](int idx) { return vec[idx]; }
-    Vec operator[](int idx) const { return vec[idx]; }
-
-    Vec at() { return Vec(); }
-
-    template<class ... T>
-    Vec at( int x, T...v ){
-        int idx = DIM - ( sizeof...(v) + 1 );
-        return vec[idx] * x + at(v...);
-    }
-
-    /// END case
-    void set(){}
-    /// Recursively set each idx 
-    template<class ... T>
-    void set(int x, T ... xs){
-      using TE = typename V::template BType< typename V::Mode::template e< ( DIM - ( sizeof...(T) )) > >;
-      int idx = DIM - ( sizeof...(T) + 1);
-      Biv biv = V::x ^ TE(1);
-      vec[idx] = V::x.rot( biv * PIOVERTWO/x );
-
-      set(xs...);
-    }
-    
-    /// Feed in a list of ratios 
-    template<class ... T>
-     Lattice(int x, T ... xs) {
-        vec[0] = V::x;
-        set(x,xs...);      
-    }
+    } 
 
 };
-    
 
-
-
+/// A 3D Point Group at the Origin, templated on V, the reflection pin operator type (e.g. cga::Vec)
 template<class V>
 struct PointGroup3D : Group<V> {
 
+    /// specifies type of operator, index into operation list, and index of input
     struct OpIdx{
       int type, opIdx, resIdx;
     };
 
+    /// Print out operations
     stringstream opStream(const OpIdx& i){
        stringstream s;
 
@@ -392,9 +576,9 @@ struct PointGroup3D : Group<V> {
     using GlideType = typename Group<V>::GlideType;
     using ScrewType = typename Group<V>::ScrewType;
 
-    V a, b, c;            ///< root versors
+    V a, b, c;            ///< unit length root versors
 
-    int mNumGen;          ///< number of generators
+    int mNumGen;          ///< the number of generators
 
     vector<OpIdx> opIdx;  ///< given a seed vector, store all transformations here.
 
@@ -402,23 +586,62 @@ struct PointGroup3D : Group<V> {
     /// Symmetry point group data
     struct Sym{
       int p,q;
-    };
-    Sym mSym;
+    } mSym;
+
+    /// Bar data
+    struct Bar{
+      bool a, b, ab;
+    } mBar;
     
+    /// Returns true if we are dealing with the special case of p=3 and q=3
     bool is33(){
       return (mSym.p==mSym.q) && (mSym.p==3);
     }
 
-    //must satisfy dicycle ab^p = bc^q = ac^2
+    PointGroup3D(){};
+    
+    /// must satisfy dicycle ab^p = bc^q = ac^2
     PointGroup3D(int p, int q, bool abar=false, bool bbar=false, bool abbar=false) 
     : mSym{p,q}
     {
+      set(p,q,abar,bbar,abbar);
+    }
+
+    void set(int p, int q, bool abar=false, bool bbar=false, bool abbar=false){
+     
+      mSym = {p,q}; 
+      mBar = {abar, bbar, abbar};
+      /// Clear all data
+      opIdx.clear();
       
       //0. a and c are at 90 degrees, must find b...
       a = V::x;
       c = V::y;
       
       //1. employ the good old spherical trig cosine rule ...
+      // @todo *there is a simpler way, below, but needs to  be worked out for is33()
+
+     //1. employ reduced version of good old spherical trig cosine rule ...
+//     double tp = PI/p;
+//     double tq = PI/q;
+//
+//     double ca = cos(tq);
+//     double sa = sin(tq);
+//     double cc = cos(tp);
+//     double sc = sin(tp);
+//
+//     //reduced (because tb is contrained to PIOVERTWO)
+//     double tA = acos( ca/sc );
+//     double tC = acos( cc/sa );
+//
+//     //2. ... to rotate the yx plane ...
+//     auto bivA = (a ^ c).rot( a.unduale() * -tA / 2.0 );//changed
+//     auto bivC = (a ^ c).rot( c.unduale() * tC / 2.0 );
+//
+//
+//     b = (bivA.duale() ^ bivC.duale()).duale().unit() * ( is33() ? -1 : 1 ); //note neg!
+//
+      //old way
       double tb = PIOVERTWO;
       double ta = is33() ? -PI/(int)p : PI/(int)p;
       double tc = is33() ? PI/(int)q : -PI/(int)q;
@@ -434,8 +657,8 @@ struct PointGroup3D : Group<V> {
       double tC = acos( (cc-(ca*cb))/(sa*sb) );
 
       //2. ... to rotate the yx plane ...
-      auto bivA = (a ^ c).rot( a.duale() * tC / 2.0 );
-      auto bivC = (a ^ c).rot( c.duale() * tA / 2.0 );//changed
+      auto bivA = (a ^ c).rot( a.duale() * -tC / 2.0 );
+      auto bivC = (a ^ c).rot( c.duale() * -tA / 2.0 );//changed
 
       //3. ... and find b via coincidence of planes ...
       b = (bivA.duale() ^ bivC.duale()).unduale().unit()  * ( is33() ? -1 : 1 ); //note neg!
@@ -443,13 +666,13 @@ struct PointGroup3D : Group<V> {
       setOps();
 
 
-      if (!abar && !bbar && !abbar ){                   //Case of only reflections. easy!
+      if (!abar && !bbar && !abbar ){                    // Case of only reflections. easy!
          opIdx= {  {0,0,0}, {0,1,0}, {0,2,0} };
-       } else if (abbar){                               // Case of roto-reflection
+       } else if (abbar){                                // Case of roto-reflection
          opIdx = { {2,0,0} };                            
        } else if ( abar && bbar ) { 
          opIdx = { {1,0,0}, {1,1,0} };
-       } else if (abar){                                 //Case of only one or other are cyclic
+       } else if (abar){                                 // Case of only one or other are cyclic
          opIdx = { {0,2,0},{1,0,0} };          
        } else if (bbar){
          opIdx = { {0,0,0},{1,1,0} };
@@ -462,17 +685,19 @@ struct PointGroup3D : Group<V> {
 
     }
 
+
+    /// Store set of operating versors
     void setOps(){
-      this->ops = {a,b,c};
-      this->sops = {a*b, b*c, a*c}; 
-      this->tops = {a*b*c, b*a*c};
+      this->ops = {a,b,c};            // OpInst type: 0
+      this->sops = {a*b, b*c, a*c};   // OpInst type: 1
+      this->tops = {a*b*c, b*a*c};    // OpInst type: 2
       this->gops = vector<GlideType>(3);
       this->scrops = vector<ScrewType>(3);
     }
 
+    /// Generate basic set of versors (we will replace with glides and screws later)
     void seed(const Vec& vec=Vec(.213,.659,1.6967).unit() ){
 
-        //opIdx.clear();
         vector<Vec> tv;
         tv.push_back(vec);
         Vec tmp;
@@ -540,7 +765,7 @@ struct PointGroup3D : Group<V> {
  
     /// apply to a std::vector and striate results
     template<class T>
-    vector<T> apply(const vector<T>& p){
+    vector<T> apply(const vector<T>& p) const{
       vector<T> res( (opIdx.size()+1) * p.size() );
       int ii=0;
       for (auto& i : p){
@@ -558,7 +783,7 @@ struct PointGroup3D : Group<V> {
     
     // apply transformation group to a multivector T
     template<class T>
-    vector<T> apply(const T& p){
+    vector<T> apply(const T& p) const{
             
       vector<T> res;
       res.push_back(p);
@@ -599,6 +824,8 @@ struct PointGroup3D : Group<V> {
 };
 
 
+/// 3D space group, templated on mirror type (e.g. cga::Vec )
+// avoid 6.3 5.3 
 template<class V>
 struct SpaceGroup3D : PointGroup3D<V> {
 
@@ -643,7 +870,7 @@ struct SpaceGroup3D : PointGroup3D<V> {
 
       
    // Sym mSym;           ///< Symmetry Class (i.e. 4,3), from which lattice system can be deduced
-    Lattice mLattice;   ///< lattice type (Primitive, Body, etc) and system (Triclinic, Cubic etc)
+    Lattice mLattice;   ///< system (Triclinic, Cubic etc) and lattice type (Primitive, Body, etc)
     Glide mGlide;       ///< glide reflections
     Screw mScrew;       ///< screw displacement
 
@@ -664,6 +891,7 @@ struct SpaceGroup3D : PointGroup3D<V> {
       dirC(); lengthC();
     }
 
+    SpaceGroup3D(){}
     
     /**
     * @brief 3D SpaceGroup Generator
@@ -686,16 +914,19 @@ struct SpaceGroup3D : PointGroup3D<V> {
       Glide glide = Glide(),
       Screw screw = {0,0,0,0,0,0}
       ) 
-      : 
-      PointGroup3D<V>(p,q,abar,bbar,abbar),
-      //mSym{p,q},
-      mLattice(lattice),
-      mRatio(ratio),
-      mGlide(glide),
-      mScrew(screw)
       {
-        init();
+        set(p,q,abar,bbar,abbar,lattice,ratio,glide,screw);
       }
+
+    void set( int p, int q, bool abar, bool bbar, bool abbar, Lattice lattice, Vec ratio, Glide glide, Screw screw){
+      
+      PointGroup3D<V>::set(p,q,abar,bbar,abbar);
+      mLattice = lattice;
+      mRatio = ratio;
+      mGlide = glide;
+      mScrew = screw;
+      init();
+    }
 
     void print(){
          if (this->is33()) printf("33\n");
@@ -869,7 +1100,7 @@ struct SpaceGroup3D : PointGroup3D<V> {
 
     }
 
-    // Q: do we need a method seed non-symmorphic space groups in general position and eliminate redundancies?
+    // Q: do we need a method to seed non-symmorphic space groups in general position and eliminate redundancies?
     void init(){
 
         // determine system based on Sym p and q
@@ -974,8 +1205,6 @@ struct SpaceGroup3D : PointGroup3D<V> {
         dirB();
         dirC();
 
-        //cout << mB_dir << endl;
-
         mA_length = lengthA();
         mB_length = lengthB();
         mC_length = lengthC();
@@ -985,10 +1214,8 @@ struct SpaceGroup3D : PointGroup3D<V> {
     /// get edge of lattice in a direction
     Vec dirA(){
       Vec tmp = this->a * mRatio[0];
-      //switch(mLattice.system){
-      //  case Cubic:
-          if (this->is33()) tmp = (this->a - this->c) * mRatio[0]/2.0;
-      //}
+      if (this->is33())
+        tmp = (this->a - this->c) * mRatio[0]/2.0;
       mA_dir = tmp;
       return mA_dir;
     }
@@ -1269,10 +1496,10 @@ struct SpaceGroup3D : PointGroup3D<V> {
       vector<T> res( motif.size() * x * y * z );
       int ii=0;
       for (auto& i : motif){
-        auto tmp = hang(i,x,y,z);
+        auto tmp = hang(i,x,y,z); // hang each point of incoming pointgroup
         int jj=0;
         for (auto& j : tmp) {
-          int idx = jj*motif.size()+ii;
+          int idx = jj*motif.size()+ii;   //find idx into results
           res[idx]=j;
           jj++;
         }
@@ -1307,3 +1534,5 @@ struct SpaceGroup3D : PointGroup3D<V> {
 
 } //vsr::
 #endif   /* ----- #ifndef vsr_group_INC  ----- */
+
+

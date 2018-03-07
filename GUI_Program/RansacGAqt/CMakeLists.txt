@@ -7,6 +7,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -std=c++11")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/outputDirectory)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libfreenect2pclgrabber-master/modules)
 
+
 find_package (Qt4 REQUIRED)
 #find_package (Qt5 REQUIRED COMPONENTS Core Gui Widgets)
 find_package (VTK REQUIRED)

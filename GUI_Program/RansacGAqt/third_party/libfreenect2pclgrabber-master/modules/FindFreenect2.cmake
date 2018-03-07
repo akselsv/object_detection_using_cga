@@ -34,17 +34,17 @@ find_path(FREENECT2_INCLUDE_DIRS NAMES libfreenect2.hpp
 	/usr/include/libfreenect2
 	/usr/local/include/
 	/usr/include/
-	/home/minions/freenect2/lib/cmake/freenect2/
-	/home/minions/freenect2/
-	/home/minions/freenect2/include/libfreenect2/
+	/home/akselsv/freenect2/lib/cmake/freenect2/
+	/home/akselsv/freenect2/
+	/home/akselsv/freenect2/include/libfreenect2/
 	}
 )
  
 find_library(FREENECT2_LIBRARY NAMES freenect2
 	HINTS
-	/home/minions/freenect2/lib/
-	/home/minions/freenect2/lib/pkgconfig/
-	/home/minions/freenect2/lib/cmake/freenect2/
+	/home/akselsv/freenect2/lib/
+	/home/akselsv/freenect2/lib/pkgconfig/
+	/home/akselsv/freenect2/lib/cmake/freenect2/
 	}
 )
 
